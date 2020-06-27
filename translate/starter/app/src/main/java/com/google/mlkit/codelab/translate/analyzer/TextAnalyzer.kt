@@ -44,9 +44,11 @@ class TextAnalyzer(
     private val imageCropPercentages: MutableLiveData<Pair<Int, Int>>
 ) : ImageAnalysis.Analyzer {
 
-    // TODO: Instantiate TextRecognition detector
+    private val detector = TextRecognition.getClient()
 
-    // TODO: Add lifecycle observer to properly close ML Kit detectors
+    init {
+        lifecycle.addObserver(detector)
+    }
 
     @androidx.camera.core.ExperimentalGetImage
     override fun analyze(imageProxy: ImageProxy) {
@@ -94,12 +96,22 @@ class TextAnalyzer(
         val croppedBitmap =
             ImageUtils.rotateAndCrop(convertImageToBitmap, rotationDegrees, cropRect)
 
-        // TODO call recognizeText() once implemented
+        recognizeText(InputImage.fromBitmap(croppedBitmap, 0)).addOnCompleteListener {
+            imageProxy.close()
+        }
     }
 
-    fun recognizeText() {
-        // TODO Use ML Kit's TextRecognition to analyze frames from the camera live feed.
-    }
+    fun recognizeText(image: InputImage): Task<Text> =
+        detector.process(image)
+            .addOnSuccessListener { text ->
+                result.value = text.text
+            }
+            .addOnFailureListener { e ->
+                Log.e(TAG, "Text recognition error", e)
+                getErrorMessage(e)?.let {
+                    Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+                }
+            }
 
     private fun getErrorMessage(exception: Exception): String? {
         val mlKitException = exception as? MlKitException ?: return exception.message
